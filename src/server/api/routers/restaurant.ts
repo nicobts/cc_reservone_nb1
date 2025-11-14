@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { eq, and } from "drizzle-orm"
+import { eq, and, ilike, or } from "drizzle-orm"
 import { ORPCError, oc } from "orpc"
 import { publicProcedure, protectedProcedure, ownerProcedure } from "../router"
 import { restaurants, restaurantSettings } from "@/db/schema"
@@ -8,6 +8,64 @@ import { createRestaurantSchema } from "@/types"
 export const restaurantRouter = oc
   .tag("Restaurant")
   .route({
+    // Public: List all restaurants with search and filters
+    list: publicProcedure
+      .input(
+        z.object({
+          search: z.string().optional(),
+          cuisine: z.string().optional(),
+          city: z.string().optional(),
+          limit: z.number().min(1).max(100).default(20),
+          offset: z.number().min(0).default(0),
+        })
+      )
+      .output(z.any())
+      .func(async ({ input, context }) => {
+        const conditions = []
+
+        // Search by name or description
+        if (input.search) {
+          conditions.push(
+            or(
+              ilike(restaurants.name, `%${input.search}%`),
+              ilike(restaurants.description, `%${input.search}%`)
+            )
+          )
+        }
+
+        // Filter by cuisine type
+        if (input.cuisine) {
+          conditions.push(ilike(restaurants.cuisineType, `%${input.cuisine}%`))
+        }
+
+        // Filter by city
+        if (input.city) {
+          conditions.push(ilike(restaurants.city, input.city))
+        }
+
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+        const [restaurantList, total] = await Promise.all([
+          context.db.query.restaurants.findMany({
+            where: whereClause,
+            limit: input.limit,
+            offset: input.offset,
+            orderBy: (restaurants, { desc }) => [desc(restaurants.createdAt)],
+          }),
+          // Count total for pagination
+          context.db.query.restaurants.findMany({
+            where: whereClause,
+          }).then((rows) => rows.length),
+        ])
+
+        return {
+          restaurants: restaurantList,
+          total,
+          limit: input.limit,
+          offset: input.offset,
+        }
+      }),
+
     // Public: Get restaurant by slug
     getBySlug: publicProcedure
       .input(z.object({ slug: z.string() }))
