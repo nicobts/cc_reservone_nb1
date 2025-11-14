@@ -9,6 +9,7 @@ import {
   sendReservationCancellation,
   sendReservationStatusUpdate,
 } from "@/lib/email"
+import { verifyRestaurantAccess, verifyReservationAccess } from "../permissions"
 
 export const reservationRouter = oc
   .tag("Reservation")
@@ -377,7 +378,8 @@ export const reservationRouter = oc
       )
       .output(z.any())
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this restaurant
+        // Verify access to restaurant
+        await verifyRestaurantAccess(context.db, input.restaurantId, context.user.id)
 
         let conditions = [eq(reservations.restaurantId, input.restaurantId)]
 
@@ -416,7 +418,8 @@ export const reservationRouter = oc
       )
       .output(z.any())
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this reservation's restaurant
+        // Verify access to reservation's restaurant
+        await verifyReservationAccess(context.db, input.id, context.user.id)
 
         // Get reservation with restaurant details before updating
         const reservation = await context.db.query.reservations.findFirst({

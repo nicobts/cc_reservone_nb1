@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { ORPCError, oc } from "orpc"
 import { ownerProcedure, staffProcedure } from "../router"
 import { restaurantSettings, restaurants } from "@/db/schema"
+import { verifyRestaurantAccess } from "../permissions"
 
 const updateSettingsSchema = z.object({
   // Reservation settings
@@ -53,7 +54,8 @@ export const settingsRouter = oc
       .input(z.object({ restaurantId: z.string().uuid() }))
       .output(z.any())
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this restaurant
+        // Verify access to restaurant
+        await verifyRestaurantAccess(context.db, input.restaurantId, context.user.id)
 
         const settings = await context.db.query.restaurantSettings.findFirst({
           where: eq(restaurantSettings.restaurantId, input.restaurantId),

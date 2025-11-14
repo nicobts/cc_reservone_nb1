@@ -4,6 +4,7 @@ import { ORPCError, oc } from "orpc"
 import { publicProcedure, staffProcedure } from "../router"
 import { tables, restaurants } from "@/db/schema"
 import { createTableSchema } from "@/types"
+import { verifyTableAccess, verifyRestaurantAccess } from "../permissions"
 
 export const tablesRouter = oc
   .tag("Tables")
@@ -13,6 +14,9 @@ export const tablesRouter = oc
       .input(z.object({ id: z.string().uuid() }))
       .output(z.any())
       .func(async ({ input, context }) => {
+        // Verify access to table's restaurant
+        await verifyTableAccess(context.db, input.id, context.user.id)
+
         const table = await context.db.query.tables.findFirst({
           where: eq(tables.id, input.id),
         })
@@ -24,8 +28,6 @@ export const tablesRouter = oc
           })
         }
 
-        // TODO: Verify user has access to this table's restaurant
-
         return table
       }),
 
@@ -34,7 +36,8 @@ export const tablesRouter = oc
       .input(z.object({ restaurantId: z.string().uuid() }))
       .output(z.any())
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this restaurant
+        // Verify access to restaurant
+        await verifyRestaurantAccess(context.db, input.restaurantId, context.user.id)
 
         const restaurantTables = await context.db.query.tables.findMany({
           where: eq(tables.restaurantId, input.restaurantId),
@@ -49,19 +52,8 @@ export const tablesRouter = oc
       .input(createTableSchema)
       .output(z.any())
       .func(async ({ input, context }) => {
-        // Verify restaurant exists and user has access
-        const restaurant = await context.db.query.restaurants.findFirst({
-          where: eq(restaurants.id, input.restaurantId),
-        })
-
-        if (!restaurant) {
-          throw new ORPCError({
-            code: "NOT_FOUND",
-            message: "Restaurant not found",
-          })
-        }
-
-        // TODO: Verify user owns or manages this restaurant
+        // Verify access to restaurant
+        await verifyRestaurantAccess(context.db, input.restaurantId, context.user.id)
 
         const [newTable] = await context.db
           .insert(tables)
@@ -81,7 +73,8 @@ export const tablesRouter = oc
       )
       .output(z.any())
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this table's restaurant
+        // Verify access to table's restaurant
+        await verifyTableAccess(context.db, input.id, context.user.id)
 
         const [updated] = await context.db
           .update(tables)
@@ -107,8 +100,8 @@ export const tablesRouter = oc
       .input(z.object({ id: z.string().uuid() }))
       .output(z.object({ success: z.boolean() }))
       .func(async ({ input, context }) => {
-        // TODO: Verify user has access to this table's restaurant
-        // TODO: Check if table has active reservations
+        // Verify access to table's restaurant
+        await verifyTableAccess(context.db, input.id, context.user.id)
 
         await context.db.delete(tables).where(eq(tables.id, input.id))
 
@@ -120,6 +113,9 @@ export const tablesRouter = oc
       .input(z.object({ id: z.string().uuid() }))
       .output(z.any())
       .func(async ({ input, context }) => {
+        // Verify access to table's restaurant
+        await verifyTableAccess(context.db, input.id, context.user.id)
+
         // Get current table
         const table = await context.db.query.tables.findFirst({
           where: eq(tables.id, input.id),
