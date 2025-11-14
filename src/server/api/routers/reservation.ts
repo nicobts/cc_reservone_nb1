@@ -9,6 +9,12 @@ import {
   sendReservationCancellation,
   sendReservationStatusUpdate,
 } from "@/lib/email"
+import {
+  sendReservationConfirmationSMS,
+  sendReservationCancellationSMS,
+  sendReservationUpdateSMS,
+  formatPhoneNumber,
+} from "@/lib/sms"
 import { verifyRestaurantAccess, verifyReservationAccess } from "../permissions"
 
 export const reservationRouter = oc
@@ -259,9 +265,12 @@ export const reservationRouter = oc
       .input(createReservationSchema)
       .output(z.any())
       .func(async ({ input, context }) => {
-        // Verify restaurant exists
+        // Verify restaurant exists and get settings
         const restaurant = await context.db.query.restaurants.findFirst({
           where: eq(restaurants.id, input.restaurantId),
+          with: {
+            settings: true,
+          },
         })
 
         if (!restaurant) {
@@ -335,6 +344,30 @@ export const reservationRouter = oc
           console.error("Failed to send confirmation email:", error)
           // Don't fail the reservation if email fails
         })
+
+        // Send confirmation SMS if enabled and phone provided
+        if (
+          restaurant.settings?.sendReminderSMS &&
+          newReservation.guestPhone
+        ) {
+          const time = new Date(newReservation.reservationDate).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+
+          sendReservationConfirmationSMS({
+            phone: formatPhoneNumber(newReservation.guestPhone),
+            guestName: newReservation.guestName,
+            restaurantName: restaurant.name,
+            date: newReservation.reservationDate,
+            time,
+            partySize: newReservation.partySize,
+            confirmationToken: newReservation.confirmationToken,
+          }).catch((error) => {
+            console.error("Failed to send confirmation SMS:", error)
+            // Don't fail the reservation if SMS fails
+          })
+        }
 
         return newReservation
       }),
@@ -485,7 +518,11 @@ export const reservationRouter = oc
             eq(reservations.confirmationToken, input.confirmationToken)
           ),
           with: {
-            restaurant: true,
+            restaurant: {
+              with: {
+                settings: true,
+              },
+            },
           },
         })
 
@@ -524,6 +561,27 @@ export const reservationRouter = oc
         }).catch((error) => {
           console.error("Failed to send cancellation email:", error)
         })
+
+        // Send cancellation SMS if enabled and phone provided
+        if (
+          reservation.restaurant.settings?.sendReminderSMS &&
+          reservation.guestPhone
+        ) {
+          const time = new Date(reservation.reservationDate).toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+
+          sendReservationCancellationSMS({
+            phone: formatPhoneNumber(reservation.guestPhone),
+            guestName: reservation.guestName,
+            restaurantName: reservation.restaurant.name,
+            date: reservation.reservationDate,
+            time,
+          }).catch((error) => {
+            console.error("Failed to send cancellation SMS:", error)
+          })
+        }
 
         return { success: true }
       }),
