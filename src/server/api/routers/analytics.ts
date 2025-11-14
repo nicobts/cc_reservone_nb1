@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { eq, and, gte, lte, desc, sql, count } from "drizzle-orm"
-import { ORPCError, oc } from "orpc"
+import { ORPCError, oc } from "@orpc/server"
 import { protectedProcedure } from "../router"
 import { reservations, payments, restaurants, tables } from "@/db/schema"
 import { verifyRestaurantAccess } from "../permissions"

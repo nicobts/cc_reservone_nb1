@@ -1,4 +1,4 @@
-import { ORPCError, os } from "orpc"
+import { ORPCError, os } from "@orpc/server"
 import type { Context } from "./context"
 
 // Create base procedure

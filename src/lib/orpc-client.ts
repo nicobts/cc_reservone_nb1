@@ -1,6 +1,6 @@
 "use client"
 
-import { createORPCClient } from "orpc/client"
+import { createORPCClient } from "@orpc/client"
 import type { AppRouter } from "@/server/api"
 
 export const orpcClient = createORPCClient<AppRouter>({

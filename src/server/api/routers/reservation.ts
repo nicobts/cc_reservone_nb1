@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm"
-import { ORPCError, oc } from "orpc"
+import { ORPCError, oc } from "@orpc/server"
 import { publicProcedure, protectedProcedure, staffProcedure } from "../router"
 import { reservations, restaurants, tables, operatingHours } from "@/db/schema"
 import { createReservationSchema, updateReservationStatusSchema } from "@/types"

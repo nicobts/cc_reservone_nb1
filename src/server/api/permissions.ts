@@ -1,4 +1,4 @@
-import { ORPCError } from "orpc"
+import { ORPCError } from "@orpc/server"
 import { eq, and } from "drizzle-orm"
 import type { db } from "@/db"
 import { restaurants, restaurantStaff, tables, reservations } from "@/db/schema"

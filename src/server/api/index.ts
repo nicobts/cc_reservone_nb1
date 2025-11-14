@@ -1,4 +1,4 @@
-import { oc } from "orpc"
+import { oc } from "@orpc/server"
 import { restaurantRouter } from "./routers/restaurant"
 import { reservationRouter } from "./routers/reservation"
 import { tablesRouter } from "./routers/tables"
