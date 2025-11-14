@@ -63,7 +63,7 @@ export default function ConfirmationPage() {
               <Link href="/">Back to Home</Link>
             </Button>
             <Button asChild>
-              <Link href="/dashboard">View My Reservations</Link>
+              <Link href="/my-reservations">View My Reservations</Link>
             </Button>
           </div>
 
