@@ -1,13 +1,253 @@
 import { z } from "zod"
-import { eq, and, gte, lte, desc } from "drizzle-orm"
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm"
 import { ORPCError, oc } from "orpc"
 import { publicProcedure, protectedProcedure, staffProcedure } from "../router"
-import { reservations, restaurants } from "@/db/schema"
+import { reservations, restaurants, tables, operatingHours } from "@/db/schema"
 import { createReservationSchema, updateReservationStatusSchema } from "@/types"
 
 export const reservationRouter = oc
   .tag("Reservation")
   .route({
+    // Public: Check availability
+    checkAvailability: publicProcedure
+      .input(
+        z.object({
+          restaurantId: z.string().uuid(),
+          date: z.date(),
+          time: z.string(), // HH:MM format
+          partySize: z.number().min(1).max(20),
+        })
+      )
+      .output(
+        z.object({
+          available: z.boolean(),
+          availableSlots: z.array(z.string()),
+          message: z.string().optional(),
+        })
+      )
+      .func(async ({ input, context }) => {
+        const { restaurantId, date, time, partySize } = input
+
+        // Get restaurant
+        const restaurant = await context.db.query.restaurants.findFirst({
+          where: eq(restaurants.id, restaurantId),
+        })
+
+        if (!restaurant) {
+          throw new ORPCError({
+            code: "NOT_FOUND",
+            message: "Restaurant not found",
+          })
+        }
+
+        // Check if restaurant is open on this day
+        const dayOfWeek = date.getDay()
+        const hours = await context.db.query.operatingHours.findFirst({
+          where: and(
+            eq(operatingHours.restaurantId, restaurantId),
+            eq(operatingHours.dayOfWeek, dayOfWeek)
+          ),
+        })
+
+        if (!hours || hours.isClosed) {
+          return {
+            available: false,
+            availableSlots: [],
+            message: "Restaurant is closed on this day",
+          }
+        }
+
+        // Check if requested time is within operating hours
+        const [requestHour, requestMinute] = time.split(":").map(Number)
+        const [openHour, openMinute] = hours.openTime.split(":").map(Number)
+        const [closeHour, closeMinute] = hours.closeTime.split(":").map(Number)
+
+        const requestTimeMinutes = requestHour * 60 + requestMinute
+        const openTimeMinutes = openHour * 60 + openMinute
+        const closeTimeMinutes = closeHour * 60 + closeMinute
+
+        if (requestTimeMinutes < openTimeMinutes || requestTimeMinutes > closeTimeMinutes - 120) {
+          // Must book at least 2 hours before closing
+          return {
+            available: false,
+            availableSlots: [],
+            message: `Restaurant is open from ${hours.openTime} to ${hours.closeTime}`,
+          }
+        }
+
+        // Get all active tables that can accommodate the party
+        const availableTables = await context.db.query.tables.findMany({
+          where: and(
+            eq(tables.restaurantId, restaurantId),
+            eq(tables.isActive, true),
+            gte(tables.maxCapacity, partySize),
+            lte(tables.minCapacity, partySize)
+          ),
+        })
+
+        if (availableTables.length === 0) {
+          return {
+            available: false,
+            availableSlots: [],
+            message: `No tables available for party of ${partySize}`,
+          }
+        }
+
+        // Check existing reservations for this time slot (2-hour window)
+        const requestedDateTime = new Date(date)
+        requestedDateTime.setHours(requestHour, requestMinute, 0, 0)
+
+        const twoHoursBefore = new Date(requestedDateTime.getTime() - 2 * 60 * 60 * 1000)
+        const twoHoursAfter = new Date(requestedDateTime.getTime() + 2 * 60 * 60 * 1000)
+
+        const conflictingReservations = await context.db.query.reservations.findMany({
+          where: and(
+            eq(reservations.restaurantId, restaurantId),
+            gte(reservations.reservationDate, twoHoursBefore),
+            lte(reservations.reservationDate, twoHoursAfter),
+            sql`${reservations.status} IN ('pending', 'confirmed', 'seated')`
+          ),
+        })
+
+        // Count how many tables are occupied
+        const occupiedTableIds = new Set(
+          conflictingReservations.map((r) => r.tableId).filter(Boolean)
+        )
+
+        const availableTableCount = availableTables.filter(
+          (t) => !occupiedTableIds.has(t.id)
+        ).length
+
+        if (availableTableCount === 0) {
+          // Generate alternative time slots
+          const alternativeSlots: string[] = []
+          for (let offset = -60; offset <= 60; offset += 15) {
+            if (offset === 0) continue
+            const altMinutes = requestTimeMinutes + offset
+            if (altMinutes >= openTimeMinutes && altMinutes <= closeTimeMinutes - 120) {
+              const altHour = Math.floor(altMinutes / 60)
+              const altMin = altMinutes % 60
+              alternativeSlots.push(
+                `${altHour.toString().padStart(2, "0")}:${altMin.toString().padStart(2, "0")}`
+              )
+            }
+          }
+
+          return {
+            available: false,
+            availableSlots: alternativeSlots.slice(0, 6),
+            message: "No tables available at this time. Here are some alternative times:",
+          }
+        }
+
+        return {
+          available: true,
+          availableSlots: [time],
+          message: `${availableTableCount} table(s) available for your party`,
+        }
+      }),
+
+    // Public: Get available time slots for a date
+    getAvailableSlots: publicProcedure
+      .input(
+        z.object({
+          restaurantId: z.string().uuid(),
+          date: z.date(),
+          partySize: z.number().min(1).max(20),
+        })
+      )
+      .output(z.array(z.string()))
+      .func(async ({ input, context }) => {
+        const { restaurantId, date, partySize } = input
+
+        // Check if restaurant is open on this day
+        const dayOfWeek = date.getDay()
+        const hours = await context.db.query.operatingHours.findFirst({
+          where: and(
+            eq(operatingHours.restaurantId, restaurantId),
+            eq(operatingHours.dayOfWeek, dayOfWeek)
+          ),
+        })
+
+        if (!hours || hours.isClosed) {
+          return []
+        }
+
+        // Get all active tables that can accommodate the party
+        const availableTables = await context.db.query.tables.findMany({
+          where: and(
+            eq(tables.restaurantId, restaurantId),
+            eq(tables.isActive, true),
+            gte(tables.maxCapacity, partySize),
+            lte(tables.minCapacity, partySize)
+          ),
+        })
+
+        if (availableTables.length === 0) {
+          return []
+        }
+
+        // Get all reservations for this date
+        const startOfDay = new Date(date)
+        startOfDay.setHours(0, 0, 0, 0)
+        const endOfDay = new Date(date)
+        endOfDay.setHours(23, 59, 59, 999)
+
+        const dayReservations = await context.db.query.reservations.findMany({
+          where: and(
+            eq(reservations.restaurantId, restaurantId),
+            gte(reservations.reservationDate, startOfDay),
+            lte(reservations.reservationDate, endOfDay),
+            sql`${reservations.status} IN ('pending', 'confirmed', 'seated')`
+          ),
+        })
+
+        // Generate all possible time slots
+        const [openHour, openMinute] = hours.openTime.split(":").map(Number)
+        const [closeHour, closeMinute] = hours.closeTime.split(":").map(Number)
+        const openTimeMinutes = openHour * 60 + openMinute
+        const closeTimeMinutes = closeHour * 60 + closeMinute
+
+        const possibleSlots: string[] = []
+        for (let minutes = openTimeMinutes; minutes <= closeTimeMinutes - 120; minutes += 15) {
+          const hour = Math.floor(minutes / 60)
+          const minute = minutes % 60
+          possibleSlots.push(`${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`)
+        }
+
+        // Filter out slots that don't have available tables
+        const availableSlots: string[] = []
+
+        for (const timeSlot of possibleSlots) {
+          const [slotHour, slotMinute] = timeSlot.split(":").map(Number)
+          const slotDateTime = new Date(date)
+          slotDateTime.setHours(slotHour, slotMinute, 0, 0)
+
+          const twoHoursBefore = new Date(slotDateTime.getTime() - 2 * 60 * 60 * 1000)
+          const twoHoursAfter = new Date(slotDateTime.getTime() + 2 * 60 * 60 * 1000)
+
+          // Check if any tables are available for this slot
+          const conflictingReservations = dayReservations.filter((r) => {
+            const resDate = new Date(r.reservationDate)
+            return resDate >= twoHoursBefore && resDate <= twoHoursAfter
+          })
+
+          const occupiedTableIds = new Set(
+            conflictingReservations.map((r) => r.tableId).filter(Boolean)
+          )
+
+          const availableTableCount = availableTables.filter(
+            (t) => !occupiedTableIds.has(t.id)
+          ).length
+
+          if (availableTableCount > 0) {
+            availableSlots.push(timeSlot)
+          }
+        }
+
+        return availableSlots
+      }),
+
     // Public: Create reservation
     create: publicProcedure
       .input(createReservationSchema)
@@ -25,12 +265,52 @@ export const reservationRouter = oc
           })
         }
 
+        // Find best available table for this reservation
+        const availableTables = await context.db.query.tables.findMany({
+          where: and(
+            eq(tables.restaurantId, input.restaurantId),
+            eq(tables.isActive, true),
+            gte(tables.maxCapacity, input.partySize),
+            lte(tables.minCapacity, input.partySize)
+          ),
+          orderBy: [tables.minCapacity], // Prefer smallest table that fits
+        })
+
+        let assignedTableId: string | null = null
+
+        if (availableTables.length > 0) {
+          // Check which tables are available at the requested time
+          const twoHoursBefore = new Date(input.reservationDate.getTime() - 2 * 60 * 60 * 1000)
+          const twoHoursAfter = new Date(input.reservationDate.getTime() + 2 * 60 * 60 * 1000)
+
+          const conflictingReservations = await context.db.query.reservations.findMany({
+            where: and(
+              eq(reservations.restaurantId, input.restaurantId),
+              gte(reservations.reservationDate, twoHoursBefore),
+              lte(reservations.reservationDate, twoHoursAfter),
+              sql`${reservations.status} IN ('pending', 'confirmed', 'seated')`
+            ),
+          })
+
+          const occupiedTableIds = new Set(
+            conflictingReservations.map((r) => r.tableId).filter(Boolean)
+          )
+
+          // Find first available table
+          const availableTable = availableTables.find((t) => !occupiedTableIds.has(t.id))
+
+          if (availableTable) {
+            assignedTableId = availableTable.id
+          }
+        }
+
         // Create reservation
         const [newReservation] = await context.db
           .insert(reservations)
           .values({
             ...input,
             userId: context.user?.id,
+            tableId: assignedTableId,
             confirmationToken: crypto.randomUUID(),
             status: "pending",
           })

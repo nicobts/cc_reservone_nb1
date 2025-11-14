@@ -38,6 +38,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
   const router = useRouter()
   const [selectedDate, setSelectedDate] = useState("")
   const [selectedTime, setSelectedTime] = useState("")
+  const [partySize, setPartySize] = useState(2)
 
   // Fetch restaurant by slug
   const { data: restaurant, isLoading: isLoadingRestaurant } = useQuery({
@@ -45,6 +46,24 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     queryFn: async () => {
       return await orpcClient.restaurant.getBySlug({ slug: params.slug })
     },
+  })
+
+  // Fetch available time slots based on selected date and party size
+  const { data: availableSlots = [], isLoading: isLoadingSlots } = useQuery({
+    queryKey: ["availableSlots", restaurant?.id, selectedDate, partySize],
+    queryFn: async () => {
+      if (!restaurant?.id || !selectedDate) return []
+
+      const [year, month, day] = selectedDate.split("-").map(Number)
+      const date = new Date(year!, month! - 1, day!)
+
+      return await orpcClient.reservation.getAvailableSlots({
+        restaurantId: restaurant.id,
+        date,
+        partySize,
+      })
+    },
+    enabled: !!restaurant?.id && !!selectedDate,
   })
 
   const form = useForm<CreateReservationFormValues>({
@@ -99,24 +118,30 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     createMutation.mutate(reservationData)
   }
 
-  // Generate available time slots (11:00 AM - 9:00 PM in 15-minute intervals)
-  const generateTimeSlots = () => {
-    const slots = []
-    for (let hour = 11; hour <= 21; hour++) {
-      for (let minute = 0; minute < 60; minute += 15) {
-        if (hour === 21 && minute > 0) break // Stop at 9:00 PM
-        const timeString = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-        const displayTime = new Date(2000, 0, 1, hour, minute).toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-        })
-        slots.push({ value: timeString, label: displayTime })
-      }
-    }
-    return slots
+  // Format time slots for display
+  const formatTimeSlots = (slots: string[]) => {
+    return slots.map((slot) => {
+      const [hour, minute] = slot.split(":").map(Number)
+      const displayTime = new Date(2000, 0, 1, hour!, minute!).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+      return { value: slot, label: displayTime }
+    })
   }
 
-  const timeSlots = generateTimeSlots()
+  const timeSlots = formatTimeSlots(availableSlots)
+
+  // Reset selected time when date or party size changes
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate)
+    setSelectedTime("") // Reset time selection
+  }
+
+  const handlePartySizeChange = (newSize: number) => {
+    setPartySize(newSize)
+    setSelectedTime("") // Reset time selection
+  }
 
   // Get minimum date (today)
   const minDate = new Date().toISOString().split("T")[0]
@@ -185,7 +210,7 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                       <Input
                         type="date"
                         value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
+                        onChange={(e) => handleDateChange(e.target.value)}
                         min={minDate}
                         className="pl-8"
                         required
@@ -195,10 +220,25 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Time</label>
-                    <Select value={selectedTime} onValueChange={setSelectedTime} required>
+                    <Select
+                      value={selectedTime}
+                      onValueChange={setSelectedTime}
+                      required
+                      disabled={!selectedDate || isLoadingSlots || timeSlots.length === 0}
+                    >
                       <SelectTrigger>
                         <Clock className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Select time" />
+                        <SelectValue
+                          placeholder={
+                            !selectedDate
+                              ? "Select date first"
+                              : isLoadingSlots
+                                ? "Loading slots..."
+                                : timeSlots.length === 0
+                                  ? "No slots available"
+                                  : "Select time"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         {timeSlots.map((slot) => (
@@ -208,6 +248,11 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedDate && !isLoadingSlots && timeSlots.length === 0 && (
+                      <p className="text-sm text-destructive">
+                        No tables available for {partySize} {partySize === 1 ? "guest" : "guests"} on this date. Try a different date or party size.
+                      </p>
+                    )}
                   </div>
 
                   <FormField
@@ -217,7 +262,11 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
                       <FormItem>
                         <FormLabel>Party Size</FormLabel>
                         <Select
-                          onValueChange={(value) => field.onChange(Number(value))}
+                          onValueChange={(value) => {
+                            const numValue = Number(value)
+                            field.onChange(numValue)
+                            handlePartySizeChange(numValue)
+                          }}
                           defaultValue={field.value.toString()}
                         >
                           <FormControl>
