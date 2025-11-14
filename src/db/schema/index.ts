@@ -6,6 +6,7 @@ export * from "./reservations"
 export * from "./payments"
 export * from "./notifications"
 export * from "./settings"
+export * from "./chatbot"
 export * from "./relations"
 
 // Re-export types for easier imports
@@ -16,6 +17,7 @@ import { reservations, reservationHistory } from "./reservations"
 import { payments } from "./payments"
 import { notifications, notificationPreferences } from "./notifications"
 import { restaurantSettings } from "./settings"
+import { chatbotConversations, chatbotMessages, chatbotKnowledge } from "./chatbot"
 
 export const schema = {
   users,
@@ -32,4 +34,7 @@ export const schema = {
   notifications,
   notificationPreferences,
   restaurantSettings,
+  chatbotConversations,
+  chatbotMessages,
+  chatbotKnowledge,
 }

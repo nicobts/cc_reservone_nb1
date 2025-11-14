@@ -5,6 +5,7 @@ import { tables } from "./tables"
 import { reservations, reservationHistory } from "./reservations"
 import { payments } from "./payments"
 import { restaurantSettings } from "./settings"
+import { chatbotConversations, chatbotMessages, chatbotKnowledge } from "./chatbot"
 
 // User relations
 export const usersRelations = relations(users, ({ many }) => ({
@@ -27,6 +28,8 @@ export const restaurantsRelations = relations(restaurants, ({ one, many }) => ({
     fields: [restaurants.id],
     references: [restaurantSettings.restaurantId],
   }),
+  chatbotConversations: many(chatbotConversations),
+  chatbotKnowledge: many(chatbotKnowledge),
 }))
 
 // Restaurant Staff relations
@@ -103,6 +106,35 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 export const restaurantSettingsRelations = relations(restaurantSettings, ({ one }) => ({
   restaurant: one(restaurants, {
     fields: [restaurantSettings.restaurantId],
+    references: [restaurants.id],
+  }),
+}))
+
+// Chatbot Conversation relations
+export const chatbotConversationsRelations = relations(chatbotConversations, ({ one, many }) => ({
+  restaurant: one(restaurants, {
+    fields: [chatbotConversations.restaurantId],
+    references: [restaurants.id],
+  }),
+  messages: many(chatbotMessages),
+  reservation: one(reservations, {
+    fields: [chatbotConversations.reservationId],
+    references: [reservations.id],
+  }),
+}))
+
+// Chatbot Message relations
+export const chatbotMessagesRelations = relations(chatbotMessages, ({ one }) => ({
+  conversation: one(chatbotConversations, {
+    fields: [chatbotMessages.conversationId],
+    references: [chatbotConversations.id],
+  }),
+}))
+
+// Chatbot Knowledge relations
+export const chatbotKnowledgeRelations = relations(chatbotKnowledge, ({ one }) => ({
+  restaurant: one(restaurants, {
+    fields: [chatbotKnowledge.restaurantId],
     references: [restaurants.id],
   }),
 }))

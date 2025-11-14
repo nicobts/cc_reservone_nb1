@@ -31,6 +31,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner"
 import { Calendar, Clock, Users, MapPin, Phone, Mail, Loader2, Store } from "lucide-react"
 import Link from "next/link"
+import { ChatbotWidget } from "@/components/chatbot-widget"
 
 type CreateReservationFormValues = z.infer<typeof createReservationSchema>
 
@@ -495,6 +496,9 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Chatbot Widget */}
+      {restaurant && <ChatbotWidget restaurantId={restaurant.id} restaurantName={restaurant.name} />}
     </div>
   )
 }
