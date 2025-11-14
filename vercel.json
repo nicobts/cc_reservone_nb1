@@ -9,5 +9,11 @@
     "BETTER_AUTH_SECRET": "@better-auth-secret",
     "STRIPE_SECRET_KEY": "@stripe-secret-key",
     "RESEND_API_KEY": "@resend-api-key"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
