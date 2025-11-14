@@ -13,6 +13,7 @@ import {
   CreditCard,
   Bell,
   TableIcon,
+  Clock,
 } from "lucide-react"
 
 const navigation = [
@@ -35,6 +36,11 @@ const navigation = [
     name: "Tables",
     href: "/dashboard/tables",
     icon: TableIcon,
+  },
+  {
+    name: "Operating Hours",
+    href: "/dashboard/settings/operating-hours",
+    icon: Clock,
   },
   {
     name: "Customers",
