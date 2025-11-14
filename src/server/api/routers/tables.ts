@@ -8,6 +8,27 @@ import { createTableSchema } from "@/types"
 export const tablesRouter = oc
   .tag("Tables")
   .route({
+    // Staff: Get single table by ID
+    getById: staffProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .output(z.any())
+      .func(async ({ input, context }) => {
+        const table = await context.db.query.tables.findFirst({
+          where: eq(tables.id, input.id),
+        })
+
+        if (!table) {
+          throw new ORPCError({
+            code: "NOT_FOUND",
+            message: "Table not found",
+          })
+        }
+
+        // TODO: Verify user has access to this table's restaurant
+
+        return table
+      }),
+
     // Staff: Get tables for a restaurant
     getRestaurantTables: staffProcedure
       .input(z.object({ restaurantId: z.string().uuid() }))
