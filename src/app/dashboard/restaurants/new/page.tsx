@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { orpcClient } from "@/lib/orpc-client"
 import { createRestaurantSchema } from "@/types"
 import type { z } from "zod"
 import { Button } from "@/components/ui/button"
@@ -27,7 +29,7 @@ type CreateRestaurantFormValues = z.infer<typeof createRestaurantSchema>
 
 export default function NewRestaurantPage() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const queryClient = useQueryClient()
 
   const form = useForm<CreateRestaurantFormValues>({
     resolver: zodResolver(createRestaurantSchema),
@@ -48,24 +50,23 @@ export default function NewRestaurantPage() {
     },
   })
 
-  async function onSubmit(values: CreateRestaurantFormValues) {
-    setIsLoading(true)
-
-    try {
-      // TODO: Call API to create restaurant
-      console.log("Creating restaurant:", values)
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
+  const createMutation = useMutation({
+    mutationFn: async (values: CreateRestaurantFormValues) => {
+      return await orpcClient.restaurant.create(values)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["restaurants"] })
       toast.success("Restaurant created successfully!")
       router.push("/dashboard/restaurants")
-    } catch (error) {
+    },
+    onError: (error) => {
+      console.error("Failed to create restaurant:", error)
       toast.error("Failed to create restaurant. Please try again.")
-      console.error("Create restaurant error:", error)
-    } finally {
-      setIsLoading(false)
-    }
+    },
+  })
+
+  async function onSubmit(values: CreateRestaurantFormValues) {
+    createMutation.mutate(values)
   }
 
   return (
@@ -97,7 +98,7 @@ export default function NewRestaurantPage() {
                   <FormItem>
                     <FormLabel>Restaurant Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="The Italian Corner" {...field} disabled={isLoading} />
+                      <Input placeholder="The Italian Corner" {...field} disabled={createMutation.isPending} />
                     </FormControl>
                     <FormDescription>
                       This will be displayed to customers
@@ -117,7 +118,7 @@ export default function NewRestaurantPage() {
                       <Textarea
                         placeholder="Authentic Italian cuisine in the heart of the city..."
                         {...field}
-                        disabled={isLoading}
+                        disabled={createMutation.isPending}
                       />
                     </FormControl>
                     <FormDescription>
@@ -140,7 +141,7 @@ export default function NewRestaurantPage() {
                           type="number"
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value))}
-                          disabled={isLoading}
+                          disabled={createMutation.isPending}
                         />
                       </FormControl>
                       <FormDescription>
@@ -172,7 +173,7 @@ export default function NewRestaurantPage() {
                           type="email"
                           placeholder="contact@restaurant.com"
                           {...field}
-                          disabled={isLoading}
+                          disabled={createMutation.isPending}
                         />
                       </FormControl>
                       <FormMessage />
@@ -191,7 +192,7 @@ export default function NewRestaurantPage() {
                           type="tel"
                           placeholder="+1 234 567 8900"
                           {...field}
-                          disabled={isLoading}
+                          disabled={createMutation.isPending}
                         />
                       </FormControl>
                       <FormMessage />
@@ -211,7 +212,7 @@ export default function NewRestaurantPage() {
                         type="url"
                         placeholder="https://www.yourrestaurant.com"
                         {...field}
-                        disabled={isLoading}
+                        disabled={createMutation.isPending}
                       />
                     </FormControl>
                     <FormMessage />
@@ -234,7 +235,7 @@ export default function NewRestaurantPage() {
                   <FormItem>
                     <FormLabel>Street Address</FormLabel>
                     <FormControl>
-                      <Input placeholder="123 Main Street" {...field} disabled={isLoading} />
+                      <Input placeholder="123 Main Street" {...field} disabled={createMutation.isPending} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -249,7 +250,7 @@ export default function NewRestaurantPage() {
                     <FormItem>
                       <FormLabel>City</FormLabel>
                       <FormControl>
-                        <Input placeholder="New York" {...field} disabled={isLoading} />
+                        <Input placeholder="New York" {...field} disabled={createMutation.isPending} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -263,7 +264,7 @@ export default function NewRestaurantPage() {
                     <FormItem>
                       <FormLabel>State/Province (Optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="NY" {...field} disabled={isLoading} />
+                        <Input placeholder="NY" {...field} disabled={createMutation.isPending} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -279,7 +280,7 @@ export default function NewRestaurantPage() {
                     <FormItem>
                       <FormLabel>Postal Code</FormLabel>
                       <FormControl>
-                        <Input placeholder="10001" {...field} disabled={isLoading} />
+                        <Input placeholder="10001" {...field} disabled={createMutation.isPending} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -293,7 +294,7 @@ export default function NewRestaurantPage() {
                     <FormItem>
                       <FormLabel>Country</FormLabel>
                       <FormControl>
-                        <Input placeholder="USA" {...field} disabled={isLoading} />
+                        <Input placeholder="USA" {...field} disabled={createMutation.isPending} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -304,11 +305,11 @@ export default function NewRestaurantPage() {
           </Card>
 
           <div className="flex justify-end gap-4">
-            <Button type="button" variant="outline" asChild disabled={isLoading}>
+            <Button type="button" variant="outline" asChild disabled={createMutation.isPending}>
               <Link href="/dashboard/restaurants">Cancel</Link>
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Restaurant"}
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Restaurant"}
             </Button>
           </div>
         </form>

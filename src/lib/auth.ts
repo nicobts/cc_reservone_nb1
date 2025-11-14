@@ -1,21 +1,21 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "@/db"
-import * as schema from "@/db/schema"
+import { users, sessions, accounts, verificationTokens } from "@/db/schema"
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
-      user: schema.users,
-      session: schema.sessions,
-      account: schema.accounts,
-      verification: schema.verificationTokens,
+      user: users,
+      session: sessions,
+      account: accounts,
+      verification: verificationTokens,
     },
   }),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: false, // Set to true when email is configured
   },
   socialProviders: {
     google: {
@@ -30,6 +30,21 @@ export const auth = betterAuth({
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60, // 5 minutes
+    },
+  },
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: true,
+        defaultValue: "customer",
+        input: true,
+      },
+      phone: {
+        type: "string",
+        required: false,
+        input: true,
+      },
     },
   },
   advanced: {

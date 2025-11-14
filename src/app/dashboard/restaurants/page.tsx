@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
+import { orpcClient } from "@/lib/orpc-client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,48 +14,33 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Plus, Search, MoreVertical, Store, MapPin, Phone, Mail } from "lucide-react"
+import { Plus, Search, MoreVertical, Store, MapPin, Phone, Mail, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 export default function RestaurantsPage() {
-  // Mock data - will be replaced with real API call
-  const restaurants = [
-    {
-      id: "1",
-      name: "The Italian Corner",
-      slug: "the-italian-corner",
-      description: "Authentic Italian cuisine in the heart of the city",
-      email: "contact@italiancorner.com",
-      phone: "+1 234 567 8900",
-      address: "123 Main Street",
-      city: "New York",
-      country: "USA",
-      logo: null,
-      isActive: true,
-      isVerified: true,
-      maxCapacity: 100,
-    },
-    {
-      id: "2",
-      name: "Sushi Paradise",
-      slug: "sushi-paradise",
-      description: "Fresh sushi and Japanese delights",
-      email: "info@sushiparadise.com",
-      phone: "+1 234 567 8901",
-      address: "456 Ocean Drive",
-      city: "Los Angeles",
-      country: "USA",
-      logo: null,
-      isActive: true,
-      isVerified: false,
-      maxCapacity: 60,
-    },
-  ]
-
   const [searchQuery, setSearchQuery] = useState("")
 
-  const filteredRestaurants = restaurants.filter((restaurant) =>
-    restaurant.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const { data: restaurants, isLoading, error } = useQuery({
+    queryKey: ["restaurants"],
+    queryFn: async () => {
+      try {
+        const result = await orpcClient.restaurant.getMyRestaurants()
+        return result
+      } catch (err) {
+        console.error("Failed to fetch restaurants:", err)
+        throw err
+      }
+    },
+  })
+
+  const filteredRestaurants =
+    restaurants?.filter((restaurant) =>
+      restaurant.name.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || []
+
+  if (error) {
+    toast.error("Failed to load restaurants")
+  }
 
   return (
     <div className="space-y-6">
@@ -83,7 +70,11 @@ export default function RestaurantsPage() {
         </div>
       </div>
 
-      {filteredRestaurants.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filteredRestaurants.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Store className="h-12 w-12 text-muted-foreground mb-4" />

@@ -1,24 +1,38 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { auth } from "@/lib/auth"
 
-const publicPaths = ["/", "/auth/signin", "/auth/signup", "/auth/forgot-password", "/api/auth"]
+const publicPaths = ["/", "/auth/signin", "/auth/signup", "/auth/forgot-password"]
 const authPaths = ["/auth/signin", "/auth/signup"]
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const sessionCookie = request.cookies.get("better-auth.session_token")
+
+  // Allow API routes and static files
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/favicon")
+  ) {
+    return NextResponse.next()
+  }
 
   // Check if path is public
-  const isPublicPath = publicPaths.some((path) => pathname.startsWith(path))
-  const isAuthPath = authPaths.some((path) => pathname.startsWith(path))
+  const isPublicPath = publicPaths.some((path) => pathname === path)
+  const isAuthPath = authPaths.some((path) => pathname === path)
+
+  // Get session
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  })
 
   // If user is logged in and trying to access auth pages, redirect to dashboard
-  if (sessionCookie && isAuthPath) {
+  if (session && isAuthPath) {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   // If user is not logged in and trying to access protected routes
-  if (!sessionCookie && !isPublicPath) {
+  if (!session && !isPublicPath && !pathname.startsWith("/auth/")) {
     const signInUrl = new URL("/auth/signin", request.url)
     signInUrl.searchParams.set("callbackUrl", pathname)
     return NextResponse.redirect(signInUrl)
