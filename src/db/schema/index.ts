@@ -6,6 +6,7 @@ export * from "./reservations"
 export * from "./payments"
 export * from "./notifications"
 export * from "./settings"
+export * from "./relations"
 
 // Re-export types for easier imports
 import { users, sessions, accounts, verificationTokens } from "./users"

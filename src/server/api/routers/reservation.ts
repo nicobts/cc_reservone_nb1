@@ -4,6 +4,11 @@ import { ORPCError, oc } from "orpc"
 import { publicProcedure, protectedProcedure, staffProcedure } from "../router"
 import { reservations, restaurants, tables, operatingHours } from "@/db/schema"
 import { createReservationSchema, updateReservationStatusSchema } from "@/types"
+import {
+  sendReservationConfirmation,
+  sendReservationCancellation,
+  sendReservationStatusUpdate,
+} from "@/lib/email"
 
 export const reservationRouter = oc
   .tag("Reservation")
@@ -316,7 +321,19 @@ export const reservationRouter = oc
           })
           .returning()
 
-        // TODO: Send confirmation email
+        // Send confirmation email (async, don't wait)
+        sendReservationConfirmation({
+          guestEmail: newReservation.guestEmail,
+          guestName: newReservation.guestName,
+          restaurantName: restaurant.name,
+          reservationDate: newReservation.reservationDate,
+          partySize: newReservation.partySize,
+          confirmationToken: newReservation.confirmationToken,
+          specialRequests: newReservation.specialRequests ?? undefined,
+        }).catch((error) => {
+          console.error("Failed to send confirmation email:", error)
+          // Don't fail the reservation if email fails
+        })
 
         return newReservation
       }),
@@ -401,6 +418,21 @@ export const reservationRouter = oc
       .func(async ({ input, context }) => {
         // TODO: Verify user has access to this reservation's restaurant
 
+        // Get reservation with restaurant details before updating
+        const reservation = await context.db.query.reservations.findFirst({
+          where: eq(reservations.id, input.id),
+          with: {
+            restaurant: true,
+          },
+        })
+
+        if (!reservation) {
+          throw new ORPCError({
+            code: "NOT_FOUND",
+            message: "Reservation not found",
+          })
+        }
+
         const [updated] = await context.db
           .update(reservations)
           .set({
@@ -415,7 +447,20 @@ export const reservationRouter = oc
           .where(eq(reservations.id, input.id))
           .returning()
 
-        // TODO: Send notification to guest
+        // Send notification email for significant status changes
+        if (input.data.status === "confirmed") {
+          sendReservationStatusUpdate({
+            guestEmail: reservation.guestEmail,
+            guestName: reservation.guestName,
+            restaurantName: reservation.restaurant.name,
+            reservationDate: reservation.reservationDate,
+            status: "confirmed",
+            message:
+              "Great news! Your reservation has been confirmed. We look forward to seeing you!",
+          }).catch((error) => {
+            console.error("Failed to send status update email:", error)
+          })
+        }
 
         return updated
       }),
@@ -436,6 +481,9 @@ export const reservationRouter = oc
             eq(reservations.id, input.id),
             eq(reservations.confirmationToken, input.confirmationToken)
           ),
+          with: {
+            restaurant: true,
+          },
         })
 
         if (!reservation) {
@@ -462,7 +510,17 @@ export const reservationRouter = oc
           })
           .where(eq(reservations.id, input.id))
 
-        // TODO: Send cancellation email
+        // Send cancellation email
+        sendReservationCancellation({
+          guestEmail: reservation.guestEmail,
+          guestName: reservation.guestName,
+          restaurantName: reservation.restaurant.name,
+          reservationDate: reservation.reservationDate,
+          partySize: reservation.partySize,
+          reason: input.reason,
+        }).catch((error) => {
+          console.error("Failed to send cancellation email:", error)
+        })
 
         return { success: true }
       }),
