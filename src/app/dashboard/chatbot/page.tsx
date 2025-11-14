@@ -301,6 +301,64 @@ export default function ChatbotSettingsPage() {
             </CardContent>
           </Card>
 
+          {/* WhatsApp Integration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>WhatsApp Integration</CardTitle>
+              <CardDescription>
+                Enable WhatsApp Business API to chat with customers on WhatsApp
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Enable WhatsApp</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Allow customers to message you on WhatsApp
+                  </p>
+                </div>
+                <Button
+                  variant={settings?.enableWhatsApp ? "default" : "outline"}
+                  onClick={() => {
+                    if (!selectedRestaurant) return
+                    orpcClient.settings.updateSettings({
+                      restaurantId: selectedRestaurant,
+                      settings: { enableWhatsApp: !settings?.enableWhatsApp },
+                    }).then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["restaurantSettings"] })
+                      toast.success("WhatsApp settings updated")
+                    })
+                  }}
+                >
+                  {settings?.enableWhatsApp ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Enabled
+                    </>
+                  ) : (
+                    "Enable"
+                  )}
+                </Button>
+              </div>
+
+              {settings?.enableWhatsApp && (
+                <div className="p-4 border rounded-lg bg-muted/50 space-y-2">
+                  <h4 className="font-semibold text-sm">Setup Instructions</h4>
+                  <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                    <li>Create a WhatsApp Business account at business.whatsapp.com</li>
+                    <li>Set up WhatsApp Business API</li>
+                    <li>Configure webhook URL: {process.env.NEXT_PUBLIC_APP_URL || "https://yourdomain.com"}/api/webhooks/whatsapp</li>
+                    <li>Add your access token and phone number ID to environment variables</li>
+                    <li>Verify webhook with token: "reservone-webhook"</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Need help? Check our documentation or contact support.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Knowledge Base */}
           <Card>
             <CardHeader>
