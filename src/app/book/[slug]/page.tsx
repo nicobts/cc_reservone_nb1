@@ -89,9 +89,27 @@ export default function BookingPage({ params }: { params: { slug: string } }) {
     mutationFn: async (values: CreateReservationFormValues) => {
       return await orpcClient.reservation.create(values)
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       toast.success("Reservation created successfully!")
-      router.push(`/book/confirmation?id=${data.id}`)
+
+      // Check if deposit payment is required
+      try {
+        const checkoutSession = await orpcClient.payment.createCheckoutSession({
+          reservationId: data.id,
+        })
+
+        // Redirect to Stripe checkout
+        window.location.href = checkoutSession.url
+      } catch (error: any) {
+        // If no deposit required or error, go to confirmation page
+        if (error?.message?.includes("No deposit required")) {
+          router.push(`/book/confirmation?id=${data.id}`)
+        } else {
+          console.error("Payment checkout error:", error)
+          // Still go to confirmation even if payment setup fails
+          router.push(`/book/confirmation?id=${data.id}`)
+        }
+      }
     },
     onError: (error) => {
       console.error("Failed to create reservation:", error)

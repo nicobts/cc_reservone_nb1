@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Calendar, Clock, Users, MapPin, X, Loader2, CalendarX, UtensilsCrossed } from "lucide-react"
+import { Calendar, Clock, Users, MapPin, X, Loader2, CalendarX, UtensilsCrossed, DollarSign, CreditCard } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -95,6 +95,62 @@ export default function MyReservationsPage() {
       default:
         return "bg-gray-100 text-gray-800"
     }
+  }
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case "succeeded":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+      case "pending":
+      case "processing":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+      case "failed":
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+      case "refunded":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  // Component to display payment info
+  function PaymentInfo({ reservation }: { reservation: any }) {
+    const { data: paymentStatus } = useQuery({
+      queryKey: ["paymentStatus", reservation.id],
+      queryFn: async () => {
+        return await orpcClient.payment.getPaymentStatus({
+          reservationId: reservation.id,
+        })
+      },
+    })
+
+    if (!paymentStatus?.exists) {
+      return null
+    }
+
+    return (
+      <div className="pt-3 border-t">
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Payment:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={getPaymentStatusColor(paymentStatus.status)}>
+              {paymentStatus.status}
+            </Badge>
+            <span className="font-medium">
+              ${(paymentStatus.amount / 100).toFixed(2)}
+            </span>
+          </div>
+        </div>
+        {paymentStatus.status === "refunded" && paymentStatus.refundedAmount > 0 && (
+          <div className="text-sm text-muted-foreground mt-1">
+            Refunded: ${(paymentStatus.refundedAmount / 100).toFixed(2)}
+          </div>
+        )}
+      </div>
+    )
   }
 
   const canCancel = (reservation: any) => {
@@ -209,6 +265,8 @@ export default function MyReservationsPage() {
                       </div>
                     )}
 
+                    <PaymentInfo reservation={reservation} />
+
                     <div className="flex justify-between items-center pt-2">
                       <Button asChild variant="outline" size="sm">
                         <Link href={`/book/${reservation.restaurant.slug}`}>
@@ -306,6 +364,7 @@ export default function MyReservationsPage() {
                         <span>{reservation.restaurant.city}</span>
                       </div>
                     </div>
+                    <PaymentInfo reservation={reservation} />
                   </CardContent>
                 </Card>
               ))}
@@ -371,6 +430,8 @@ export default function MyReservationsPage() {
                       </p>
                     </div>
                   )}
+
+                  <PaymentInfo reservation={reservation} />
 
                   <div className="flex justify-between items-center pt-2">
                     <Button asChild variant="outline" size="sm">

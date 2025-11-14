@@ -4,6 +4,7 @@ import { reservationRouter } from "./routers/reservation"
 import { tablesRouter } from "./routers/tables"
 import { operatingHoursRouter } from "./routers/operating-hours"
 import { settingsRouter } from "./routers/settings"
+import { paymentRouter } from "./routers/payment"
 
 export const appRouter = oc.router({
   restaurant: restaurantRouter,
@@ -11,6 +12,7 @@ export const appRouter = oc.router({
   tables: tablesRouter,
   operatingHours: operatingHoursRouter,
   settings: settingsRouter,
+  payment: paymentRouter,
 })
 
 export type AppRouter = typeof appRouter
